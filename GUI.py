@@ -73,8 +73,13 @@ class gui():
     
 
     def piece_clicked(self, var):
-            self.engine.move_piece(var)
+        self.engine.move_piece(var)
     
+
+    def reset_board(self):
+        self.engine.reset()
+        self._update_board()
+
 
     def create_widgets(self):
         #Names
@@ -141,3 +146,7 @@ class gui():
             new_button.place(x=0, y=0, relwidth=1, relheight=1)
         
         frame1.grid(row=1, column=1)
+
+
+        reset_button = ttk.Button(self.root, text="Reset", command=self.reset_board)
+        reset_button.grid(row=1, column=2)

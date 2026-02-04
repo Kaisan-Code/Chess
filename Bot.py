@@ -1,4 +1,4 @@
-#TODO Continue making the Anti-Chess Engine
+#TODO Add piece blundering ;)
 
 import copy
 from random import choice
@@ -35,6 +35,7 @@ class DumbBot():
 
         self.piece_pos = []
 
+        #Go through all the pieces
         for piece in range(64):
             if not self._validate_piece(board, piece):
                 continue
@@ -75,6 +76,7 @@ class DumbBot():
 
                 self.engine._swap_turns()
 
+                #If in check then don't add it
                 if self.engine.look_for_checks(new_position):
                     self.engine._swap_turns()
                     continue
@@ -90,18 +92,19 @@ class DumbBot():
 
     def make_move(self, board_temp=None):
         self.get_positions(board_temp)
-
         
+
         #Evalulate positions
 
-        #1. Calculate total moves
+        #1. Calculate total moves in each position
         #(And pick the move that restricts itself the most)
-        self.total_moves_ = []
+        self.position_scores_ = []
 
         for position in self.all_positions: #Going through all of the positions
             position_total = 0
 
-            for piece in range(64): #All the pieces
+            #We add the total remaning moves (+1 score) to self.position_scores_
+            for piece in range(64):
                 if not self._validate_piece(position, piece):
                     continue
 
@@ -110,11 +113,40 @@ class DumbBot():
                 #Looking through all the squares in available_squares to find how many are 1's
                 for i in range(64):
                     if available_squares[i // 8][i % 8] == 1:
-                        position_total += 1
+                        #Score "adding"
+                        position_total -= 1
             
-            self.total_moves_.append(position_total)
+            self.position_scores_.append(position_total)
         
-        worst_pos_index = self.total_moves_.index(min(self.total_moves_))
+
+        #2. Score any checkmating positions very bad
+        #Don't checkmate if it can
+        turn = self.engine.turn
+
+        for index, position in enumerate(self.all_positions):
+            #If opponent not in check, then we can't count it as a "checkmate"
+            if not self.engine.look_for_checks(position):
+                continue
+
+            if self.engine.look_for_checkmate(position):
+                self.position_scores_[index] -= 999
+            
+            self.engine.turn = turn
+        
+
+        #3. Punishes capturing pieces / Promoting
+        for index, position in enumerate(self.all_positions):
+            values = self.engine.check_total(position)
+            
+            if self.engine.turn == "w":
+                self.position_scores_[index] += (values[1] - values[0])
+            
+            elif self.engine.turn == "b":
+                self.position_scores_[index] += (values[0] - values[1])
+        
+        
+        #Make the move on the real board
+        worst_pos_index = self.position_scores_.index(max(self.position_scores_))
 
         w_pos_values = self.piece_pos[worst_pos_index]
 

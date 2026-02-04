@@ -1,13 +1,47 @@
-#TODO Make stalemate detection
-
 import tkinter as tk
-import _tkinter as tk_error
-import copy
 from GUI import gui
 from Bot import DumbBot
 
 class chess_engine():
-    def __init__(self):
+    def reset_self_settings(self):
+        self.last_position = []
+        
+        self.available_squares = [[0 for _ in range(8)] for _ in range(8)]
+
+        self.en_passant = False
+        self.turn = "w"
+        self.w_in_check = False
+        self.b_in_check = False
+
+        self.pending_move_id = None
+
+        #Left rook, King, Right rook (From white's POV)
+        self.castle_rights_w = [True, True, True]
+        self.castle_rights_b = [True, True, True]
+        
+        #White, Black
+        self.can_castle = [False, False]
+
+        #Castle permissions
+        for i in range(64):
+            if self.board[i // 8][i % 8] == "wK":
+                if i != 60:
+                    self.w_can_castle = False
+            elif self.board[i // 8][i % 8] == "bK":
+                if i != 4:
+                    self.b_can_castle = False
+
+        self.TotalW = 39
+        self.TotalB = 39
+        self.checkmate = False
+        self.stalemate = False
+        self.values = {"P": 1, "N": 3, "B": 3, "R": 5, "Q": 9}
+        self.selected_piece = ""
+        self.selected_piece_pos = ""
+    
+    
+    def __init__(self, root=None):
+        self.root = root
         self.board = [["bR", "bN", "bB", "bQ", "bK", "bB", "bN", "bR"],
                 ["bP", "bP", "bP", "bP", "bP", "bP", "bP", "bP"],
                 ["__", "__", "__", "__", "__", "__", "__", "__"],
@@ -20,11 +54,11 @@ class chess_engine():
         wKing = False
         bKing = False
 
-        #Reduced range from 64 to 8 - only need to check the 8 rows.
+        #Reduced range from 64 to 8 - unnecessary checks.
         for i in range(8):
             if "wK" in self.board[i]:
                 wKing = True
-            elif "bK" in self.board[i]:
+            if "bK" in self.board[i]:
                 bKing = True
         
         if not (wKing and bKing):
@@ -34,38 +68,10 @@ class chess_engine():
                 print("Black King Missing!")
             root.destroy()
         
-        self.last_position = []
-        
-        self.available_squares = [[0 for _ in range(8)] for _ in range(8)]
-
-        self.en_passant = False
-        self.turn = "w"
-        self.w_in_check = False
-        self.b_in_check = False
-
-        #Left rook, King, Right rook (From white's POV)
-        self.castle_rights_w = [True, True, True]
-        self.castle_rights_b = [True, True, True]
-        
-        #White, Black
-        self.can_castle = [True, True]
-
-        for i in range(64):
-            if self.board[i // 8][i % 8] == "wK":
-                if i != 60:
-                    self.w_can_castle = False
-            elif self.board[i // 8][i % 8] == "bK":
-                if i != 4:
-                    self.b_can_castle = False
-
-        self.TotalW = 39
-        self.TotalB = 39
-        self.checkmate = False
-        self.values = {"P": 1, "N": 3, "B": 3, "R": 5, "Q": 9}
-        self.selected_piece = ""
-        self.selected_piece_pos = ""
+        self.reset_self_settings()
         
         self.dumb_bot = DumbBot(self)
+        self.chess_gui = gui(root, self)
     
 
     def _reset_able_sq(self):
@@ -86,18 +92,42 @@ class chess_engine():
             
         elif self.turn == "b":
             self.turn = "w"
+
+
+    def reset(self):
+        if self.pending_move_id is not None:
+            self.root.after_cancel(self.pending_move_id) #when did this command exist
+            self.pending_move_id = None
+
+        self.board = [["bR", "bN", "bB", "bQ", "bK", "bB", "bN", "bR"],
+                ["bP", "bP", "bP", "bP", "bP", "bP", "bP", "bP"],
+                ["__", "__", "__", "__", "__", "__", "__", "__"],
+                ["__", "__", "__", "__", "__", "__", "__", "__"],
+                ["__", "__", "__", "__", "__", "__", "__", "__"],
+                ["__", "__", "__", "__", "__", "__", "__", "__"],
+                ["wP", "wP", "wP", "wP", "wP", "wP", "wP", "wP"],
+                ["wR", "wN", "wB", "wQ", "wK", "wB", "wN", "wR"]]
+
+        self.reset_self_settings()
+        
+        self.chess_gui.board = self.board
  
 
-    def check_total(self):
+    def check_total(self, board=None):
+        if board is None:
+            board = self.board
+        
         self.TotalW = 0
         self.TotalB = 0
 
-        for row, item in enumerate(self.board):
+        for row, item in enumerate(board):
             for column, item2 in enumerate(item):
-                if self.board[row][column][0] == "w":
+                if board[row][column][0] == "w":
                     self.TotalW += self._piece_value(item2[1])
-                elif self.board[row][column][0] == "b":
+                elif board[row][column][0] == "b":
                     self.TotalB += self._piece_value(item2[1])
+        
+        return (self.TotalW, self.TotalB)
 
     
     def _set_available_sq(self, capture, var, board=None, row_sub=0, col_sub=0, rook=False, bishop=False):
@@ -232,7 +262,10 @@ class chess_engine():
         return False
     
 
-    def look_for_checkmate(self):
+    def look_for_checkmate(self, board=None):
+        if board is None:
+            board = self.board
+        
         self._reset_able_sq()
 
         #Swap turns to find all the moves for the next player
@@ -240,9 +273,9 @@ class chess_engine():
 
         #Check every piece
         for piece in range(64):
-            if self.board[piece // 8][piece % 8] == "__":
+            if board[piece // 8][piece % 8] == "__":
                 continue
-            elif not self.turn in self.board[piece // 8][piece % 8]:
+            elif not self.turn in board[piece // 8][piece % 8]:
                 continue
             
             able_sq = self.make_available_squares(piece)
@@ -260,7 +293,7 @@ class chess_engine():
                     continue
                 
                 #Copying the board to not change the actual board state
-                new_pos = copy.deepcopy(self.board)
+                new_pos = [row[:] for row in board]
                 
                 new_pos = self._make_move(square, new_pos)
                 if new_pos == -1:
@@ -283,14 +316,16 @@ class chess_engine():
                 self._swap_turns()
             
             self._reset_able_sq()
-        return True
-    
-
-    def look_for_stalemate(self, board=None):
-        if board is None:
-            board = self.board
         
-
+        #Either checkmate or stalemate
+        self._swap_turns()
+        
+        if self.look_for_checks(board) is False:
+            return 2
+        
+        self._swap_turns()
+        
+        return True
 
 
     def _make_move(self, var, board=None, castle_rights_=False):
@@ -329,7 +364,7 @@ class chess_engine():
         
         #Looking if the King is moving "through" check while castling
         if abs(self.selected_piece_pos - var) == 2 and "K" in self.selected_piece:
-            new_board = copy.deepcopy(board)
+            new_board = [row[:] for row in board]
             
             #Where it just placed a King
             new_board[r][c] = "__"
@@ -423,7 +458,7 @@ class chess_engine():
     
     def _revert_position(self):
         self.board = self.last_position
-        chess_gui.board = self.last_position
+        self.chess_gui.board = self.last_position
 
         #Reseting the castle rights
         self.castle_rights_w = self.last_w_castle_rights
@@ -518,7 +553,7 @@ class chess_engine():
                 en_passant(1, "wP")
         
         elif "N" in piece:
-            #Hard-Coding the Knight movements
+            #Hard-Coding the Knight movements. What else am I to do
             self._set_available_sq(False, var, board, 2, 1) #2 up, 1 left
             self._set_available_sq(False, var, board, 2, -1) #2 up, 1 right
             self._set_available_sq(False, var, board, 1, 2) #1 up, 2 left
@@ -584,7 +619,7 @@ class chess_engine():
         #OR the row and column of the selected piece (see not moving a piece)
         row = var // 8
         col = var % 8
-        
+
         #Actually moving a piece
         if self.selected_piece != "":
             #Checks if a piece is trying to move to a square that it can't
@@ -595,9 +630,7 @@ class chess_engine():
             
             #Saving the last position to check for illegial moves
             #And saving the castling rights in case of illegial move
-            
-            #Replaces the use of deepcopying the whole board
-            self.last_position = [self.board[i][:] for i in range(8)]
+            self.last_position = [row[:] for row in board]
 
             self.last_w_castle_rights = self.castle_rights_w[:]
             self.last_b_castle_rights = self.castle_rights_b[:]
@@ -628,28 +661,35 @@ class chess_engine():
                 return
             
             self._swap_turns()
-
             
-            if self.look_for_checkmate():
+            result = self.look_for_checkmate()
+
+            if result is True:
                 print("Checkmate!")
                 self.checkmate = True
+                self.stalemate = False
             #look_for_checkmate swaps the turns, so no need to do it again
+            elif result == 2:
+                print("Stalemate!")
+                self.checkmate = False
+                self.stalemate = True
 
             
             #Updating board(s)
             self.turn = next_turn
             self.check_total()
-            chess_gui.board = board
+            self.chess_gui.board = board
             self.dumb_bot.board = board
             self.board = board
             self._reset_able_sq()
-            chess_gui._update_board()
+            self.chess_gui._update_board()
 
-            if self.checkmate:
+            if self.checkmate or self.stalemate:
                 print(self.board)
                 return
+            
             if self.turn == "b":
-                root.after(500, lambda: self.dumb_bot.make_move_random(self.board))
+                self.pending_move_id = self.root.after(100, lambda: self.dumb_bot.make_move(self.board))
             return
 
 
@@ -667,11 +707,6 @@ class chess_engine():
 
 if __name__ == "__main__":
     root = tk.Tk()
-    engine = chess_engine()
-
-    try:
-        chess_gui = gui(root, engine)
-    except tk_error.TclError:
-        pass
+    engine = chess_engine(root)
 
     root.mainloop()
