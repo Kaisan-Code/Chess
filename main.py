@@ -700,7 +700,6 @@ class chess_engine():
                 return
 
             self.make_available_squares(var)
-            print(self.available_squares)
 
 
 if __name__ == "__main__":
