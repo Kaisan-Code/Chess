@@ -15,13 +15,6 @@ class chess_engine():
 
         self.pending_move_id = None
 
-        #Left rook, King, Right rook (From white's POV)
-        self.castle_rights_w = [True, True, True]
-        self.castle_rights_b = [True, True, True]
-        
-        #White, Black
-        self.can_castle = [False, False]
-
         #Castle permissions
         for i in range(64):
             if self.board[i // 8][i % 8] == "wK":
@@ -69,6 +62,9 @@ class chess_engine():
             root.destroy()
         
         self.reset_self_settings()
+        self.castle_rights_w = [True, True, True]
+        self.castle_rights_b = [True, True, True]
+        self.can_castle = [True, True]
         
         self.dumb_bot = DumbBot(self)
         self.chess_gui = gui(root, self)
@@ -109,6 +105,9 @@ class chess_engine():
                 ["wR", "wN", "wB", "wQ", "wK", "wB", "wN", "wR"]]
 
         self.reset_self_settings()
+        self.castle_rights_w = [True, True, True]
+        self.castle_rights_b = [True, True, True]
+        self.can_castle = [True, True]
         
         self.chess_gui.board = self.board
  
@@ -579,11 +578,11 @@ class chess_engine():
                 if can_castle is False:
                     return
 
-                if castle_rights[0] and board[num // 8][(num % 8) - 1] == "__":
+                if castle_rights[0] == True and board[num // 8][(num % 8) - 1] == "__":
                     #2 Squares to the left
                     self._set_available_sq(False, var, board, 0, 2)
                 
-                if castle_rights[2] and board[num // 8][(num % 8) + 1] == "__":
+                if castle_rights[2] == True and board[num // 8][(num % 8) + 1] == "__":
                     #2 Squares to the right
                     self._set_available_sq(False, var, board, 0, -2)
                 return
@@ -596,11 +595,9 @@ class chess_engine():
                     self._set_available_sq(False, var, board, row, column)
             
             if self.castle_rights_w[1] is False:
-                self.w_can_castle = False
                 self.can_castle[0] = False
             
             if self.castle_rights_b[1] is False:
-                self.b_can_castle = False
                 self.can_castle[1] = False
 
             if self.turn == "w":
@@ -689,20 +686,21 @@ class chess_engine():
                 return
             
             if self.turn == "b":
-                self.pending_move_id = self.root.after(100, lambda: self.dumb_bot.make_move(self.board))
+                self.pending_move_id = self.root.after(100, lambda: self.dumb_bot.make_move_random(self.board))
             return
 
+        else:
+            #Finding the available squares that a piece can move to
+            self._reset_able_sq()
 
-        #Finding the available squares that a piece can move to
-        self._reset_able_sq()
+            if not self.turn in board[row][col]:
+                return
 
-        if not self.turn in board[row][col]:
-            return
+            if board[row][col] == "__":
+                return
 
-        if board[row][col] == "__":
-            return
-
-        self.make_available_squares(var)
+            self.make_available_squares(var)
+            print(self.available_squares)
 
 
 if __name__ == "__main__":
